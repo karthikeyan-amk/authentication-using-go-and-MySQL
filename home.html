@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Home Page</title>
+</head>
+<body>
+  <h1>Welcome to the Home Page</h1>
+  
+  <div id="userEmail"></div>
+  
+  <button onclick="logout()">Logout</button>
+  
+  <script>
+    // Retrieve the user's email ID from the session (stored in Redis)
+    var userEmail = sessionStorage.getItem('userEmail');
+    
+    // Display the user's email ID on the page
+    document.getElementById('userEmail').innerText = 'Email ID: ' + userEmail;
+    
+    // Function to clear the session and redirect to the login page
+    function logout() {
+      // Clear the session (remove the user's email ID from Redis)
+      sessionStorage.removeItem('userEmail');
+      
+      // Redirect to the login page
+      window.location.href = '/login.html';
+    }
+  </script>
+</body>
+</html>
