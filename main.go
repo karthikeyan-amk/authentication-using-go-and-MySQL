@@ -1,60 +1,54 @@
 package main
 
 import (
-	"database/sql"
-	"log"
-	"net/http"
-	"context"
+     "context"
+    "database/sql"
+    "log"
+    "net/http"
 	"fmt"
 	"time"
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
-	_ "github.com/go-sql-driver/mysql"
-	"golang.org/x/crypto/bcrypt"
-	"github.com/go-redis/redis/v8"
-	"github.com/gin-contrib/sessions"
-	
+
+    "github.com/gin-contrib/cors"
+    "github.com/gin-gonic/gin"
+    "github.com/go-redis/redis/v8"
+    "golang.org/x/crypto/bcrypt"
+    _ "github.com/go-sql-driver/mysql"
 )
 
-var (
-	db          *sql.DB
-	RedisClient *redis.Client
-)
+var( db *sql.DB
+redisClient *redis.Client)
 
-
- 
 func main() {
-	r := gin.Default()
+    r := gin.Default()
 
-	// cors
-	config := cors.DefaultConfig()
-	config.AllowAllOrigins = true                 // Allow all origins
-	config.AllowMethods = []string{"GET", "POST"} // Specify what methods are allowed
-	config.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type"}
+    // CORS configuration
+    config := cors.DefaultConfig()
+    config.AllowAllOrigins = true
+    config.AllowMethods = []string{"GET", "POST"}
+    config.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type"}
+    r.Use(cors.New(config))
 
-	r.Use(cors.New(config))
+    // Database connection
+    var err error
+    db, err = sql.Open("mysql", "root:root@tcp(127.0.0.1:3001)/my_database")
+    if err != nil {
+        panic(err.Error())
+    }
+    defer db.Close()
 
-	// Database connection
-	db, err := sql.Open("mysql", "root:root@tcp(127.0.0.1:3001)/my_database")
-	if err != nil {
-		panic(err.Error())
-	}
-	log.Println("Connected to DB")
-	defer db.Close()
-
-	//Redis connection
-	RedisClient = redis.NewClient(&redis.Options{
-        Addr:     "localhost:6379",
-        Password: "", // No password
-        DB:       0,  // Default DB
-    })
-
-    ctx := context.Background()
-    pong, err := RedisClient.Ping(ctx).Result()
+    // Redis connection
+    redisClient = redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
+    _, err = redisClient.Ping(context.Background()).Result()
     if err != nil {
         log.Fatal("Error connecting to Redis:", err)
     }
-    log.Println("Connected to Redis:", pong)
+    log.Println("Connected to Redis")
+
+
 
 	// Register endpoint
 	r.POST("/register", func(c *gin.Context) {
@@ -89,7 +83,8 @@ func main() {
 		c.Redirect(http.StatusFound, "/login.html")
 	})
 
-	r.POST("/login",func(c* gin.Context){
+	// Login endpoint
+	r.POST("/login", func(c *gin.Context) {
 		var user User
 		if err := c.ShouldBindJSON(&user); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
@@ -111,28 +106,16 @@ func main() {
 		sessionID := fmt.Sprintf("session:%d", time.Now().UnixNano())
 
 	// Set session data in Redis
-		err = RedisClient.Set(c, sessionID, user.Email, time.Hour*24).Err()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create session"})
-			return
-		}
+	err = redisClient.Set(c, sessionID, user.Email, time.Hour*24).Err()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create session"})
+		return
+	}
 
-	session := sessions.Default(c)
-	session.Set("session_id", sessionID)
-	session.Save()
-
-		http.SetCookie(c.Writer, &http.Cookie{
-		Name:     "session_id",
-		Value:    sessionID,
-		Expires:  time.Now().Add(time.Hour * 24), // Expires in 24 hours
-		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
-	})
-
-
-		c.JSON(http.StatusOK, gin.H{"message": "Login successful","session_id": sessionID})
+		c.JSON(http.StatusOK, gin.H{"message": "Login successful","session_id":sessionID})
 		c.Redirect(http.StatusFound, "/home.html")
 	})
+
 	// Run the server
 	r.Run(":3002")
 }
